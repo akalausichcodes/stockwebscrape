@@ -1,0 +1,78 @@
+# Install and load the necessary packages
+install.packages(c("shiny", "tidyverse", "quantmod", "ggplot2"))
+library(shiny)
+library(tidyverse)
+library(quantmod)
+library(ggplot2)
+
+# Set the list of stock tickers
+tickers <- c("AAPL", "GOOG", "MSFT", "AMZN")
+
+# Define the function to pull in the data for a given stock ticker
+get_stock_data <- function(ticker) {
+  # Get the stock data from Yahoo Finance
+  stock_data <- getSymbols(ticker, auto.assign = FALSE, return.class = "tibble")
+
+  # Keep only the date, adjusted closing price, and EPS columns
+  stock_data <- stock_data %>%
+    select(date, adjusted = Ad(ticker), eps = EPS(ticker))
+
+  # Convert the date column to a Date object and set it as the index
+  stock_data$date <- as.Date(stock_data$date)
+  stock_data <- stock_data %>%
+    set_index(date)
+
+  # Remove any NA rows
+  stock_data <- stock_data %>%
+    drop_na()
+
+  # Return the cleaned-up data frame
+  return(stock_data)
+}
+
+# Define the UI for the Shiny app
+ui <- fluidPage(
+  # Add a title and sidebar layout
+  titlePanel("Stock Price and EPS Visualization"),
+  sidebarLayout(
+    # Define the sidebar with a dropdown menu for selecting the stock ticker
+    sidebarPanel(
+      selectInput("ticker", "Stock Ticker:",
+                  choices = tickers,
+                  selected = tickers[1])
+    ),
+    # Define the main panel for displaying the plot
+    mainPanel(
+      plotOutput("plot")
+    )
+  )
+)
+
+# Define the server logic for the Shiny app
+server <- function(input, output) {
+  # Reactive expression to get the selected stock data
+  stock_data <- reactive({
+    get_stock_data(input$ticker)
+  })
+
+  # Render the plot
+  output$plot <- renderPlot({
+    # Create a line plot of the adjusted closing price
+    p <- ggplot(stock_data(), aes(x = index(stock_data()), y = adjusted)) +
+      geom_line()
+
+    # Overlay a scatter plot of the EPS data
+    p <- p + geom_point(aes(y = eps), color = "red")
+
+    # Add a legend
+    p <- p + labs(title = input$ticker,
+                  y = "Price/EPS",
+                  color = c("Black", "Red"))
+
+    # Print the plot
+    print(p)
+  })
+}
+
+# Run the Shiny app
+shinyApp(ui = ui, server = server)
